@@ -1,0 +1,329 @@
+---
+title: "Activity 3"
+author: "Thuy Nguyen"
+date: "4/16/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning= FALSE, message= FALSE, echo = FALSE}
+library(reshape2)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(corrplot)
+library(geepack)
+library(multcomp)
+```
+
+# Q1: Explore the data: 
+## 1. Loading the data and checking missing values
+
+```{r, echo =FALSE}
+cholest <- read.csv("cholesterol.csv")[,-1]
+
+head(cholest)
+print(paste0("Total numbers of missing values are ",sum(is.na(cholest))))
+print(paste0( sum(!complete.cases(cholest)), " rows have at least one missing value"))
+cholest_long <- melt(cholest, id.vars  = c("id", "group")) %>% 
+                mutate(time = gsub("y","", variable)) %>% 
+                mutate(time = as.numeric(as.factor(time)), group = as.factor(group)) %>%       
+                mutate(group_name = ifelse(group==1, "High dose", "Placebo") )
+
+```
+The dataset includes measurements of each individual in two groups at 5 different times. The dataset has total 68 missing values and 36 rows have at least one missing value.
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+pal2use <- c("darkblue", "firebrick")
+ggplot(data = cholest_long, aes(x= as.factor(time), y = value, col= group))+ geom_boxplot() + xlab("Time") +ylab("Cholesterol serum levels (mg/dl)") + ggtitle("Boxplot of Cholesterol serum levels vs Time") + scale_color_manual(values =pal2use) + theme()
+```
+There are a big overlaps in cholesterol serum levels between group 1 and group 2 at each measurement point. Group 2 tends to have a greater variance than group 1 at each time point. 
+
+## 2. Summaries statistics
+
+*a. Summaries of cholesterol serum levels at each month period by group*
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+
+summary_long <-cholest_long %>% group_by(group, time) %>% summarise(mean_value = mean(value, na.rm = TRUE), sd_value = sd(value, na.rm = TRUE), n_obs = sum(!is.na(value)), n_missing = sum(is.na(value)), prop_missing = round(n_missing/n_obs,3))
+summary_long
+```
+
+ *b. Response missing*
+```{r, echo= FALSE}
+cholest[!complete.cases(cholest),] %>% group_by(group, id)
+```
+*c. Plot of the means*
+
+```{r, message= FALSE, warning=FALSE, echo=FALSE}
+
+ggplot(aes(time, mean_value, col = group, group = group),
+       data = summary_long) + geom_point() + geom_line() + theme() + scale_color_manual(values = pal2use) + ylab("Mean of cholesterol serum levels(mg/dL)") + xlab("Time")
+
+``` 
+Cholesterol serum levels in both group tend to increase overtime.
+
+At baseline, group 1 has the mean cholesterol serum levels lower than group 2. However, From baseline to time 2, we see a sharper increase in cholesterol serum levels on average in group 1 than in group 2. 
+
+ From time 2 to time 3,  the rates of increase in mean cholesterol serum levels of the two groups are slowdown, but group 1 still increase more than group 2. Thus, group 1 has higher mean cholesterol serum levels at this time point than group 2.
+ 
+From time 3 to time 4, we see a rapid increase in the mean cholesterol serum levels in group 2  while the rate of group 1 is slightly dropped. So at time 4,  the relationship between mean cholesterol levels of group 1 and group 2 is reversed. Group 2 has a higher mean of serum cholesterol than group 1. The mean cholesterol of group 2 leveled off at time while  group1 dropped slightly.
+
+
+
+## 3. Residual:
+
+*Plot Residual vs Time*
+
+
+```{r, echo = FALSE}
+#Compute residual
+
+cholest_long <- cholest_long %>% group_by(group, time) %>% mutate(resid = value - mean(value, na.rm = T))
+
+ggplot(aes(time, resid, group= id, col = group),data = cholest_long) + geom_line() + scale_color_manual(values = pal2use) + ylab("Residual (mg/dL)") + xlab("Time")
+```
+
+The partern of residual over time appears to be flat. That means cholesterol serum levels measurements taken on the same individual are correlated.
+
+*Scatter plot of Residuals for each group*
+
+
+```{r, echo = FALSE}
+cholest_w1 <- reshape(as.data.frame(cholest_long[cholest_long$group_name =="High dose", c(1,5,4)]), direction = "wide", idvar = "id", timevar = "time")
+
+
+
+pairs(cholest_w1[,2:6], upper.panel = NULL, diag.panel = NULL, main = ("Scatterplot of residuals for high dose group"))
+
+```
+
+
+
+```{r, echo = FALSE}
+cholest_w2 <- reshape(as.data.frame(cholest_long[cholest_long$group_name =="Placebo", c(1,5,4)]), direction = "wide", idvar = "id", timevar = "time")
+
+pairs(cholest_w2[,2:6], upper.panel = NULL, diag.panel = NULL, main = ("Scatterplot of residuals for placebo group"))
+
+```
+
+
+
+```{r, echo=FALSE}
+cor_mat_g1 <- cor(cholest[cholest$group ==1, c("y1","y2","y3","y4", "y5")],use = "complete.obs")
+
+corrplot(cor_mat_g1, method = "color", type = "lower", addCoef.col = "yellow" , title  = " Empirical correlation matrix among group 1", mar=c(0,0,1,0))
+``` 
+
+
+There appears a positive correlation in group2, with some evidence that it decreases with increasing in time lab
+
+
+
+
+
+```{r, echo = FALSE}
+cor_mat_g2 <- cor(cholest[cholest$group ==2, c("y1","y2","y3","y4", "y5")],use = "pairwise.complete.obs")
+
+corrplot(cor_mat_g2, method = "color", type = "lower", addCoef.col = "yellow", 
+         title = "Empirical correlation matrix among group 1", mar=c(0,0,1,0))
+```
+ There appear to be strong positive correlation in group 1 (stronger than group 2), with some evidence that it decreases with increasing time lab. 
+ 
+# Q2
+
+\begin{align*} E[CTL_j| group1, time_j] &=  \beta_0 + \beta_1 I_{group1} + \beta_2 I_{time_j =2} + \beta_3 I_{time_j=3}  + \beta_4 I_{time_j =4} \\
+& + \beta_5 I_{time_j =5} + \beta_6 I_{group1}* I_{time_j = 2} + \beta_7 I_{group1}*I_{time_j =3}\\ 
+& + \beta_8 I_{group1}* I_{time_j =4}  + \beta_9 I_{group1}* I_{time_j = 5} \end{align*}
+ 
+ Where:
+ 
+ 1. $CLT_j$ : measurement of cholesterol serum levels of a participant  at time j (mg/dL)
+ 1. $\beta_0$ : The mean cholesterol serum levels at baseline of reference group, measured in (mg/dL).
+ 1. $\beta_1$ : The difference in mean cholesterol serum levels at baseline comparing group 1 and reference group, measured in (mg/dL).
+ 2. $\beta_2$: The difference in mean cholesterol serum levels between time= 2 and  baseline comparing people of the same group , measured in (mg/dL).
+ 
+ 4. $\beta_6$: The additional difference in mean cholesterol serum levels between time =2  and baseline comparing group 1 and group 2, measured in (mg/dL).
+ 
+ 
+
+# Q3
+```{r, echo=FALSE}
+cholest_long <- cholest_long[order(cholest_long$id, cholest_long$time),]
+cholest_long$group <- relevel(cholest_long$group, ref = "2")
+cholest_long$time <- as.factor(cholest_long$time)
+mod1 <- geeglm(value~ time * group, data = cholest_long[complete.cases(cholest_long),], id = id )
+tidy(mod1, conf.int = TRUE)
+
+```
+Our scientific question of interest: is the pattern of change in mean cholesterol serum levels the same for high dose and placebo group. To answer this question, we are going to test the null hypothesis
+
+$$H_0: \beta_6 = \beta_7 = \beta_8 = \beta_9$$
+```{r, echo=FALSE}
+anova(mod1)
+```
+Focusing on the last row of the output since it corresponds to the null hypothesis test. We obtain a p-value is equal 0.11. That means that at 5% significant level, we have no evidence to reject the null hypothesis. So, we conclude that the pattern of change in mean from baseline  is the same for two groups.
+
+# Q4
+
+We will use GEE with working independence to analyze response profiles, treating time as a continuous variable.
+
+Fitted model:
+
+$$E[CTL_j| group1, time_j] =  \beta_0 + \beta_1 I_{group1} + \beta_2 * time_j+ \beta_3 I_{group1} * time_j$$
+
+Where: $time_j$ is the difference in time between measurement j comparing to baseline.
+
+
+```{r, warning= FALSE, echo=FALSE}
+cholest_long$months<- rep(NA, nrow(cholest_long))
+
+for ( i in 1:nrow(cholest_long)){
+  if (cholest_long$time[i] == 1) cholest_long$months[i] = 0
+  else if (cholest_long$time[i] == 2) cholest_long$months[i] = 6
+  else if (cholest_long$time[i] == 3) cholest_long$months[i] = 12
+  else if (cholest_long$time[i] == 4) cholest_long$months[i] = 20
+  else   cholest_long$months[i] = 24
+  
+}
+```
+
+
+```{r, echo=FALSE}
+mod3 <- geeglm(value ~ months * group, data = cholest_long[complete.cases(cholest_long),], id = id)
+summary(mod3)
+tidy(mod3, conf.int = T)
+cholest_g1 <- glht(mod3, linfct = c("months + months:group1 = 0"))
+confint(cholest_g1)
+
+```
+The estimated rate of increase in mean cholesterol serum levels for treatment group (high dose group) is  1.18 mg/dL/ month with 95% CI:( 0.704 mg/dL/month - 1.662 mg/dL/month)
+
+The estimated rate of increase in mean serum cholesterol levels for the placebo group is  0.944 mg/dL/month with 95% CI: (0.457 mg/dL/month -	1.431 mg/dL/month)
+
+To answer the question: "At the 5%
+significance level, are the patterns of change the same in the two groups?" , we are going to test the null hypothesis:
+$$H_0: \beta_3 = 0$$
+
+```{r, echo= FALSE}
+mod3_reduce <- geeglm(value ~ group+months , data =cholest_long[complete.cases(cholest_long),], id = id)
+
+anova(mod3, mod3_reduce)
+```
+
+The p-value is 0.49. So, at 5% significant level we conclude that the rate of increase in mean serum cholesterol levels are the same for two groups.
+
+# Q5
+*Comparison*
+
+
+Because we treated time as categorical variable in part 3, so the mean model included all interaction terms of group1 and each  category of time. In contrast, there was only one interaction term of group 1 and continuous time variable in part 4. 
+
+Even though two models treated time differently- one as categorical, and the other as a linear variable- the conclusions were similar. In both cases,we fail to reject the null hypotheses at 5% significant level. However, we obtained a much greater p-value in part 4 (0.49) than part 3 (0.11).
+
+*Advantage of treating time as a categorical variable:*
+
+1. It can handle incompleteness due to missing data.
+2. It's straightforward and easy to the analyse the patterns of change over time  differ between the two groups.
+
+*Disadvantage of treating time as categorical variable:*
+ 
+  1. With a big number of time points, treating time as categorical variable will make the model is very complex and hard to interpret.
+  2. The time-ordering of the reapeated measurements is ignored.
+
+*Advantage of treating time as a continuous variable:*
+
+ 1. The time-ordering of the reapeated measurements is counted.
+ 2. The models will be simpler and easier to interpret event with a huge variety of time points
+ 
+*Disadvantage of treating time as a continuous variable:*
+
+  Can't handle well incompleteness due to missing data.
+
+
+## Appendix:
+
+```{r, echo, eval=FALSE,message=FALSE, warning=FALSE}
+library(reshape2)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(corrplot)
+library(geepack)
+library(multcomp)
+
+# Load data
+cholest <- read.csv("cholesterol.csv")[,-1]
+
+head(cholest)
+print(paste0("Total numbers of missing values are ",sum(is.na(cholest))))
+print(paste0( sum(!complete.cases(cholest)), " rows have at least one missing value"))
+cholest_long <- melt(cholest, id.vars  = c("id", "group")) %>% 
+                mutate(time = gsub("y","", variable)) %>% 
+                mutate(time = as.numeric(as.factor(time)), group = as.factor(group)) %>%       
+                mutate(group_name = ifelse(group==1, "High dose", "Placebo") )
+# Boxplot
+pal2use <- c("darkblue", "firebrick")
+ggplot(data = cholest_long, aes(x= as.factor(time), y = value, col= group))+ geom_boxplot() + xlab("Time") +ylab("Cholesterol serum levels (mg/dl)") + ggtitle("Boxplot of Cholesterol serum levels vs Time") + scale_color_manual(values =pal2use) + theme()
+
+# Summary data
+summary_long <-cholest_long %>% group_by(group, time) %>% summarise(mean_value = mean(value, na.rm = TRUE), sd_value = sd(value, na.rm = TRUE), n_obs = sum(!is.na(value)), n_missing = sum(is.na(value)), prop_missing = round(n_missing/n_obs,3))
+summary_long
+# Missingness
+cholest[!complete.cases(cholest),] %>% group_by(group, id)
+
+# plot of the means
+ggplot(aes(time, mean_value, col = group, group = group),
+       data = summary_long) + geom_point() + geom_line() + theme() + scale_color_manual(values = pal2use) + ylab("Mean of cholesterol serum levels(mg/dL)") + xlab("Time")
+
+# R3sidual
+
+cholest_long <- cholest_long %>% group_by(group, time) %>% mutate(resid = value - mean(value, na.rm = T))
+ggplot(aes(time, resid, group= id, col = group),data = cholest_long) + geom_line() + scale_color_manual(values = pal2use) + ylab("Residual (mg/dL)") + xlab("Time")
+
+cholest_w1 <- reshape(as.data.frame(cholest_long[cholest_long$group_name =="High dose", c(1,5,4)]), direction = "wide", idvar = "id", timevar = "time")
+pairs(cholest_w1[,2:6], upper.panel = NULL, diag.panel = NULL, main = ("Scatterplot of residuals for high dose group"))
+
+cholest_w2 <- reshape(as.data.frame(cholest_long[cholest_long$group_name =="Placebo", c(1,5,4)]), direction = "wide", idvar = "id", timevar = "time")
+pairs(cholest_w2[,2:6], upper.panel = NULL, diag.panel = NULL, main = ("Scatterplot of residuals for placebo group"))
+
+cor_mat_g1 <- cor(cholest[cholest$group ==1, c("y1","y2","y3","y4", "y5")],use = "pairwise.complete.obs")
+corrplot(cor_mat_g1, method = "color", type = "lower", addCoef.col = "yellow" , title  = " Empirical correlation matrix among group 1", mar=c(0,0,1,0))
+
+cor_mat_g2 <- cor(cholest[cholest$group ==2, c("y1","y2","y3","y4", "y5")],use = "pairwise.complete.obs")
+corrplot(cor_mat_g2, method = "color", type = "lower", addCoef.col = "yellow" , title  = " Empirical correlation matrix among group 1", mar=c(0,0,1,0))
+
+# GEE for categorical time
+cholest_long <- cholest_long[order(cholest_long$id, cholest_long$time),]
+cholest_long$group <- relevel(cholest_long$group, ref = "2")
+cholest_long$time <- as.factor(cholest_long$time)
+mod1 <- geeglm(value~ time * group, data = cholest_long[complete.cases(cholest_long),], id = id )
+tidy(mod1, conf.int = TRUE)
+
+## Anova
+anova(mod1)
+
+#adding column months
+cholest_long$months<- rep(NA, nrow(cholest_long))
+
+for ( i in 1:nrow(cholest_long)){
+  if (cholest_long$time[i] == 1) cholest_long$months[i] = 0
+  else if (cholest_long$time[i] == 2) cholest_long$months[i] = 6
+  else if (cholest_long$time[i] == 3) cholest_long$months[i] = 12
+  else if (cholest_long$time[i] == 4) cholest_long$months[i] = 20
+  else   cholest_long$months[i] = 24
+} 
+# GEE for continuous time
+mod3 <- geeglm(value ~ months * group, data = cholest_long[complete.cases(cholest_long),], id = id)
+tidy(mod3, conf.int = T)
+cholest_g1 <- glht(mod3, linfct = c("months + months:group1 = 0"))
+confint(cholest_g1)
+
+#Anova
+mod3_reduce <- geeglm(value ~ group+months , data =cholest_long[complete.cases(cholest_long),], id = id)
+anova(mod3, mod3_reduce)
+```
+
