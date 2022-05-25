@@ -133,7 +133,7 @@ corrplot(cor_mat_g2, method = "color", type = "lower", addCoef.col = "yellow",
 ```
  There appear to be strong positive correlation in group 1 (stronger than group 2), with some evidence that it decreases with increasing time lab. 
  
-# Fitting model treating time as a categorical
+# Fitting GEE modelwith working independence correlation matrix, treating time as a categorical
 
 \begin{align*} E[CTL_j| group1, time_j] &=  \beta_0 + \beta_1 I_{group1} + \beta_2 I_{time_j =2} + \beta_3 I_{time_j=3}  + \beta_4 I_{time_j =4} \\
 & + \beta_5 I_{time_j =5} + \beta_6 I_{group1}* I_{time_j = 2} + \beta_7 I_{group1}*I_{time_j =3}\\ 
@@ -167,7 +167,7 @@ anova(mod1)
 ```
 Focusing on the last row of the output since it corresponds to the null hypothesis test. We obtain a p-value is equal 0.11. That means that at 5% significant level, we have no evidence to reject the null hypothesis. So, we conclude that the pattern of change in mean from baseline  is the same for two groups.
 
-# Fitting GEE with working independence, treating time as a continuous variable.
+# Fitting GEE with working independence corelation matrix, treating time as a continuous variable.
 
 Fitted model:
 
